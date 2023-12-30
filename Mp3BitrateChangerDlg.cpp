@@ -8,13 +8,16 @@
 #include "Mp3BitrateChangerDlg.h"
 #include "afxdialogex.h"
 
-#include <string>
-
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 #include <iostream>
+#include <string>
+#include <filesystem>
+#include <future>
+#include <thread>
+
 #include "audiorw/audiorw.hpp"
 
 // 응용 프로그램 정보에 사용되는 CAboutDlg 대화 상자입니다.
@@ -64,6 +67,7 @@ void CMp3BitrateChangerDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDLISTCTRL, m_ListCtrl);
+	DDX_Control(pDX, IDC_PROGRESS_CONVERT, convert_progress_bar);
 }
 
 BEGIN_MESSAGE_MAP(CMp3BitrateChangerDlg, CDialogEx)
@@ -173,21 +177,57 @@ HCURSOR CMp3BitrateChangerDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-
-
+//TODO :: make Progress bar
 void CMp3BitrateChangerDlg::OnBnClickedConvert()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	//convert_progress_bar.ModifyStyle(PBS_MARQUEE, 0);
+	//convert_progress_bar.SetMarquee(TRUE, 30);
+	constexpr int MAX_LIMIT_BITE = 20971520; // 20MB
+	TCHAR szPath[MAX_PATH] = { 0, };
+	SHGetSpecialFolderPath(NULL, szPath, CSIDL_PERSONAL, FALSE);
+	std::string strPath = std::string(CT2CA(szPath));
+	auto output_path = std::filesystem::path((strPath + "\\Mp3BitrateChanger"));
+	if (!std::filesystem::is_directory(output_path))
+		std::filesystem::create_directory(output_path);
 
-		// Read the file
-	std::cout << "Reading from file " << ".\\test.mp3" << std::endl;
-	double sample_rate;
-	std::vector<std::vector<double>> audio =
-		audiorw::read(".\\test.mp3", sample_rate);
+	convert_progress_bar.SetRange32(0, 100);
+	for (int i = 0; i < m_ListCtrl.GetItemCount(); i++)
+	{
+		auto item = m_ListCtrl.GetItemText(i, 0);
+		auto full_path = std::string(CT2CA(item));
+		int size = std::filesystem::file_size(std::filesystem::path(full_path));
+		int bitrate_idx = 0;
+		if (size < MAX_LIMIT_BITE)
+			continue;
 
-	// Write the file
-	std::cout << "Writing to file " << ".\\out.mp3" << std::endl;
-	audiorw::write(audio, ".\\out.mp3", sample_rate);
+
+		int find = full_path.rfind("\\") + 1;
+
+		std::string input_path = full_path.substr(0, find);
+		std::string input_file_name = full_path.substr(find, full_path.length() - find);
+
+		int output_size = 0;
+		do
+		{
+			// Read the file
+			double sample_rate;
+			std::vector<std::vector<double>> audio =
+				audiorw::read(full_path, sample_rate);
+
+			// Write the file
+			auto output_filename = output_path.string() + "\\" + input_file_name;
+			audiorw::write(audio, output_filename, sample_rate, bitrate_idx);
+			bitrate_idx++;
+			output_size = std::filesystem::file_size(std::filesystem::path(output_filename));
+		} while (output_size > MAX_LIMIT_BITE);
+		convert_progress_bar.OffsetPos((int)((float)i / m_ListCtrl.GetItemCount() * 100));
+	}
+	convert_progress_bar.OffsetPos(100);
+	//convert_progress_bar.SetMarquee(1, 30);
+
+	//convert_progress_bar.ModifyStyle(0, PBS_MARQUEE);
+	AfxMessageBox((LPCTSTR)CA2CT("Done!!"));
 }
 
 

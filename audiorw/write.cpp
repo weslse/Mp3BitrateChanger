@@ -14,10 +14,11 @@ extern "C" {
 
 using namespace audiorw;
 
-void audiorw::write(
+bool audiorw::write(
 	const std::vector<std::vector<double>>& audio,
 	const std::string& filename,
-	double sample_rate) {
+	double sample_rate,
+	int loopCnt) {
 
 	// Get a buffer for writing errors to
 	size_t errbuf_size = 200;
@@ -103,7 +104,7 @@ void audiorw::write(
 	av_channel_layout_default(&codec_context->ch_layout, audio.size());
 	codec_context->sample_rate = sample_rate;
 	codec_context->sample_fmt = output_codec->sample_fmts[0];
-	codec_context->bit_rate = OUTPUT_BIT_RATE;
+	codec_context->bit_rate = OUTPUT_BIT_RATE[loopCnt];
 
 	// Set the sample rate of the container
 	stream->time_base.den = sample_rate;
@@ -186,7 +187,7 @@ void audiorw::write(
 	}
 
 	// Construct a packet for the encoded frame
-	av_init_packet(&packet);
+	av_new_packet(&packet, 0);
 	packet.data = NULL;
 	packet.size = 0;
 
@@ -276,4 +277,6 @@ void audiorw::write(
 	// Cleanup
 	delete[] audio_data;
 	cleanup(codec_context, format_context, resample_context, frame, packet);
+	
+	return true;
 }
