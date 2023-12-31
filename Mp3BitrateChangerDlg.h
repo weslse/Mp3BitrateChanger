@@ -5,8 +5,6 @@
 #pragma once
 #include "CFileListControl.h"
 
-#define MESSAGE_PROGRESSBAR WM_USER+102
-
 // CMp3BitrateChangerDlg 대화 상자
 class CMp3BitrateChangerDlg : public CDialogEx
 {
