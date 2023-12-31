@@ -81,7 +81,6 @@ END_MESSAGE_MAP()
 
 
 // CMp3BitrateChangerDlg 메시지 처리기
-
 BOOL CMp3BitrateChangerDlg::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
@@ -118,7 +117,10 @@ BOOL CMp3BitrateChangerDlg::OnInitDialog()
 	m_ListCtrl.GetWindowRect(&rt);
 	m_ListCtrl.SetExtendedStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT); // 리스트 컨트롤에 선표시 및 Item 선택시 한행 전체 선택
 
-	m_ListCtrl.InsertColumn(0, (LPCTSTR)(CString)("내용"), LVCFMT_LEFT, rt.Width());
+	m_ListCtrl.InsertColumn(0, (LPCTSTR)(CString)("파일 이름"), LVCFMT_LEFT, rt.Width());
+
+	convert_progress_bar.SetRange(0, 100);
+
 
 	ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);
 	ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
@@ -177,12 +179,9 @@ HCURSOR CMp3BitrateChangerDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-//TODO :: make Progress bar
 void CMp3BitrateChangerDlg::OnBnClickedConvert()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
-	//convert_progress_bar.ModifyStyle(PBS_MARQUEE, 0);
-	//convert_progress_bar.SetMarquee(TRUE, 30);
 	constexpr int MAX_LIMIT_BITE = 20971520; // 20MB
 	TCHAR szPath[MAX_PATH] = { 0, };
 	SHGetSpecialFolderPath(NULL, szPath, CSIDL_PERSONAL, FALSE);
@@ -191,9 +190,11 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 	if (!std::filesystem::is_directory(output_path))
 		std::filesystem::create_directory(output_path);
 
-	convert_progress_bar.SetRange32(0, 100);
+
 	for (int i = 0; i < m_ListCtrl.GetItemCount(); i++)
 	{
+		convert_progress_bar.OffsetPos(5);
+		
 		auto item = m_ListCtrl.GetItemText(i, 0);
 		auto full_path = std::string(CT2CA(item));
 		int size = std::filesystem::file_size(std::filesystem::path(full_path));
@@ -201,9 +202,7 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 		if (size < MAX_LIMIT_BITE)
 			continue;
 
-
 		int find = full_path.rfind("\\") + 1;
-
 		std::string input_path = full_path.substr(0, find);
 		std::string input_file_name = full_path.substr(find, full_path.length() - find);
 		std::string replace_name = "\\foo.mp3";
@@ -213,30 +212,31 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 		{
 			// rename for UNICODE file name
 			std::filesystem::rename(full_path, temp_path);
-			
+
 			// Read the file
 			double sample_rate;
 			std::vector<std::vector<double>> audio =
 				audiorw::read(temp_path, sample_rate);
+			convert_progress_bar.OffsetPos(5);
 
 			// Write the file
 			auto output_temp_filename = output_path.string() + "\\" + replace_name;
 			audiorw::write(audio, output_temp_filename, sample_rate, bitrate_idx++);
-			
+
+			convert_progress_bar.OffsetPos(5);
 			// rename for UNICODE file name
 			std::filesystem::rename(temp_path, full_path);
-			
+
 			auto output_filename = output_path.string() + "\\" + input_file_name;
 			std::filesystem::rename(output_temp_filename, output_filename);
-			
+
 			output_size = std::filesystem::file_size(std::filesystem::path(output_filename));
 		} while (output_size > MAX_LIMIT_BITE);
-		convert_progress_bar.OffsetPos((int)((float)i / m_ListCtrl.GetItemCount() * 100));
+		
+		convert_progress_bar.SetPos((int)((double)(i+1) / m_ListCtrl.GetItemCount() * 100));
 	}
-	convert_progress_bar.OffsetPos(100);
-	//convert_progress_bar.SetMarquee(1, 30);
 
-	//convert_progress_bar.ModifyStyle(0, PBS_MARQUEE);
+	convert_progress_bar.SetPos(100);
 	AfxMessageBox((LPCTSTR)CA2CT("Done!!"));
 }
 
