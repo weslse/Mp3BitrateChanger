@@ -206,19 +206,29 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 
 		std::string input_path = full_path.substr(0, find);
 		std::string input_file_name = full_path.substr(find, full_path.length() - find);
-
+		std::string replace_name = "\\foo.mp3";
+		std::string temp_path = input_path + "\\" + replace_name;
 		int output_size = 0;
 		do
 		{
+			// rename for UNICODE file name
+			std::filesystem::rename(full_path, temp_path);
+			
 			// Read the file
 			double sample_rate;
 			std::vector<std::vector<double>> audio =
-				audiorw::read(full_path, sample_rate);
+				audiorw::read(temp_path, sample_rate);
 
 			// Write the file
+			auto output_temp_filename = output_path.string() + "\\" + replace_name;
+			audiorw::write(audio, output_temp_filename, sample_rate, bitrate_idx++);
+			
+			// rename for UNICODE file name
+			std::filesystem::rename(temp_path, full_path);
+			
 			auto output_filename = output_path.string() + "\\" + input_file_name;
-			audiorw::write(audio, output_filename, sample_rate, bitrate_idx);
-			bitrate_idx++;
+			std::filesystem::rename(output_temp_filename, output_filename);
+			
 			output_size = std::filesystem::file_size(std::filesystem::path(output_filename));
 		} while (output_size > MAX_LIMIT_BITE);
 		convert_progress_bar.OffsetPos((int)((float)i / m_ListCtrl.GetItemCount() * 100));
