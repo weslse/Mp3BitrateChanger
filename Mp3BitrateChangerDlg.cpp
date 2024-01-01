@@ -117,10 +117,11 @@ BOOL CMp3BitrateChangerDlg::OnInitDialog()
 	m_ListCtrl.GetWindowRect(&rt);
 	m_ListCtrl.SetExtendedStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT); // 리스트 컨트롤에 선표시 및 Item 선택시 한행 전체 선택
 
-	m_ListCtrl.InsertColumn(0, (LPCTSTR)(CString)("파일 이름"), LVCFMT_LEFT, rt.Width());
+	m_ListCtrl.InsertColumn(0, (LPCTSTR)(CString)("파일 경로"), LVCFMT_LEFT, rt.Width());
 
 	convert_progress_bar.SetRange(0, 100);
-
+	
+	SetWindowText(_T("Mp3 Bitrate Converter"));
 
 	ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);
 	ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
@@ -189,7 +190,6 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 	auto output_path = std::filesystem::path((strPath + "\\Mp3BitrateChanger"));
 	if (!std::filesystem::is_directory(output_path))
 		std::filesystem::create_directory(output_path);
-
 
 	for (int i = 0; i < m_ListCtrl.GetItemCount(); i++)
 	{
