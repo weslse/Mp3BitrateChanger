@@ -121,7 +121,7 @@ BOOL CMp3BitrateChangerDlg::OnInitDialog()
 
 	convert_progress_bar.SetRange(0, 100);
 	
-	SetWindowText(_T("Mp3 Bitrate Converter"));
+	SetWindowText(_T("Mp3BitrateChanger"));
 
 	ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);
 	ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
