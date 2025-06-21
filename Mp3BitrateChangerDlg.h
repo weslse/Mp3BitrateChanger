@@ -4,6 +4,7 @@
 
 #pragma once
 #include "CFileListControl.h"
+#include <filesystem>
 
 // CMp3BitrateChangerDlg 대화 상자
 class CMp3BitrateChangerDlg : public CDialogEx
@@ -32,9 +33,12 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 
+	std::filesystem::path make_temp_ascii_path(int index);
+
 public:
 	CFileListControl m_ListCtrl;
 	afx_msg void OnBnClickedConvert();
 	afx_msg void OnBnClickedDel();
+	LRESULT OnUpdateProgress(WPARAM wParam, LPARAM lParam);
 	CProgressCtrl convert_progress_bar;
 };

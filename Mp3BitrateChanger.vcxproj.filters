@@ -62,6 +62,9 @@
     <ClCompile Include="audiorw\write.cpp">
       <Filter>audiorw</Filter>
     </ClCompile>
+    <ClCompile Include="audiorw.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Mp3BitrateChanger.rc">

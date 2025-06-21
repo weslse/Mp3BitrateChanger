@@ -1,5 +1,4 @@
-﻿
-// Mp3BitrateChangerDlg.cpp: 구현 파일
+﻿// Mp3BitrateChangerDlg.cpp: 구현 파일
 //
 
 #include "pch.h"
@@ -14,11 +13,15 @@
 
 #include <iostream>
 #include <string>
-#include <filesystem>
 #include <future>
 #include <thread>
+#include <vector>
+#include <shellapi.h> // 파일 상단에 추가
+#include <mutex> // 추가
 
 #include "audiorw/audiorw.hpp"
+
+#define WM_UPDATE_PROGRESS (WM_USER + 1)
 
 // 응용 프로그램 정보에 사용되는 CAboutDlg 대화 상자입니다.
 
@@ -77,6 +80,7 @@ BEGIN_MESSAGE_MAP(CMp3BitrateChangerDlg, CDialogEx)
 	ON_WM_DROPFILES()
 	ON_BN_CLICKED(IDC_CONVERT, &CMp3BitrateChangerDlg::OnBnClickedConvert)
 	ON_BN_CLICKED(IDDEL, &CMp3BitrateChangerDlg::OnBnClickedDel)
+	ON_MESSAGE(WM_UPDATE_PROGRESS, &CMp3BitrateChangerDlg::OnUpdateProgress)
 END_MESSAGE_MAP()
 
 
@@ -120,7 +124,7 @@ BOOL CMp3BitrateChangerDlg::OnInitDialog()
 	m_ListCtrl.InsertColumn(0, (LPCTSTR)(CString)("파일 경로"), LVCFMT_LEFT, rt.Width());
 
 	convert_progress_bar.SetRange(0, 100);
-	
+
 	SetWindowText(_T("Mp3BitrateChanger"));
 
 	ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);
@@ -182,64 +186,109 @@ HCURSOR CMp3BitrateChangerDlg::OnQueryDragIcon()
 
 void CMp3BitrateChangerDlg::OnBnClickedConvert()
 {
-	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	// 변환 시작 시 프로그레스바 초기화
+	convert_progress_bar.SetPos(0);
+
 	constexpr int MAX_LIMIT_BITE = 20971520; // 20MB
 	TCHAR szPath[MAX_PATH] = { 0, };
 	SHGetSpecialFolderPath(NULL, szPath, CSIDL_PERSONAL, FALSE);
-	std::string strPath = std::string(CT2CA(szPath));
-	auto output_path = std::filesystem::path((strPath + "\\Mp3BitrateChanger"));
+
+	std::filesystem::path output_path;
+	output_path = std::filesystem::path(szPath) / L"Mp3BitrateChanger";
 	if (!std::filesystem::is_directory(output_path))
 		std::filesystem::create_directory(output_path);
 
-	for (int i = 0; i < m_ListCtrl.GetItemCount(); i++)
+	int total = m_ListCtrl.GetItemCount();
+
+	for (int i = 0; i < total; i++)
 	{
-		convert_progress_bar.OffsetPos(5);
-		
-		auto item = m_ListCtrl.GetItemText(i, 0);
-		auto full_path = std::string(CT2CA(item));
-		int size = std::filesystem::file_size(std::filesystem::path(full_path));
-		int bitrate_idx = 0;
-		if (size < MAX_LIMIT_BITE)
-			continue;
+		try {
+			CString item = m_ListCtrl.GetItemText(i, 0);
+			std::wstring wpath(item);
+			std::filesystem::path full_path(wpath);
+			int size = 0;
+			if (!std::filesystem::exists(full_path)) {
+				CString msg;
+				msg.Format(_T("파일이 존재하지 않습니다:\n%s"), item);
+				AfxMessageBox(msg);
+				continue;
+			}
+			size = std::filesystem::file_size(full_path);
 
-		int find = full_path.rfind("\\") + 1;
-		std::string input_path = full_path.substr(0, find);
-		std::string input_file_name = full_path.substr(find, full_path.length() - find);
-		std::string replace_name = "\\foo.mp3";
-		std::string temp_path = input_path + "\\" + replace_name;
-		int output_size = 0;
-		do
-		{
-			// rename for UNICODE file name
-			std::filesystem::rename(full_path, temp_path);
+			int bitrate_idx = 0;
+			if (size < MAX_LIMIT_BITE)
+				continue;
 
-			// Read the file
-			double sample_rate;
-			std::vector<std::vector<double>> audio =
-				audiorw::read(temp_path, sample_rate);
-			convert_progress_bar.OffsetPos(5);
+			std::filesystem::path input_path = full_path.parent_path();
+			std::wstring input_file_name = full_path.filename().wstring();
+			std::wstring replace_name = L"foo" + std::to_wstring(i + 1) + L".mp3";
+			std::filesystem::path temp_path = input_path / replace_name;
+			int output_size = 0;
 
-			// Write the file
-			auto output_temp_filename = output_path.string() + "\\" + replace_name;
-			audiorw::write(audio, output_temp_filename, sample_rate, bitrate_idx++);
+			// 임시 영어 경로 생성
+			std::filesystem::path ascii_temp_path = make_temp_ascii_path(i);
 
-			convert_progress_bar.OffsetPos(5);
-			// rename for UNICODE file name
-			std::filesystem::rename(temp_path, full_path);
+			// 한글 경로를 임시 영어 경로로 복사
+			std::filesystem::copy_file(full_path, ascii_temp_path, std::filesystem::copy_options::overwrite_existing);
 
-			auto output_filename = output_path.string() + "\\" + input_file_name;
-			std::filesystem::rename(output_temp_filename, output_filename);
+			int loop_count = 0;
+			const int MAX_LOOP = 10;
+			do
+			{
+				std::string utf8_path = wstring_to_utf8(ascii_temp_path.wstring());
+				double sample_rate;
+				std::vector<std::vector<double>> audio =
+					audiorw::read(utf8_path, sample_rate);
 
-			output_size = std::filesystem::file_size(std::filesystem::path(output_filename));
-		} while (output_size > MAX_LIMIT_BITE);
-		
-		convert_progress_bar.SetPos((int)((double)(i+1) / m_ListCtrl.GetItemCount() * 100));
+				auto output_temp_filename = (output_path / replace_name).wstring();
+				audiorw::write(audio, output_temp_filename, sample_rate, bitrate_idx++);
+
+				auto output_filename = (output_path / input_file_name).wstring();
+				std::filesystem::rename(output_temp_filename, output_filename);
+
+				output_size = std::filesystem::file_size(output_filename);
+
+				loop_count++;
+				
+
+				if (loop_count > MAX_LOOP) {
+					AfxMessageBox(_T("파일 크기를 제한 이하로 줄일 수 없습니다. 변환을 중단합니다."));
+					break;
+				}
+			} while (output_size > MAX_LIMIT_BITE);
+
+			// 임시 파일 삭제
+			std::filesystem::remove(ascii_temp_path);
+
+			int percent = static_cast<int>((i + 1) * 100 / total);
+			OnUpdateProgress(percent, 0);
+		}
+		catch (const std::filesystem::filesystem_error& e) {
+			CString msg;
+			msg.Format(_T("파일 시스템 예외 발생:\n%s"), CString(e.what()));
+			AfxMessageBox(msg);
+		}
+		catch (const std::exception& e) {
+			CString msg;
+			msg.Format(_T("예외 발생:\n%s"), CString(e.what()));
+			AfxMessageBox(msg);
+		}
+		catch (...) {
+			AfxMessageBox(_T("알 수 없는 예외가 발생했습니다."));
+		}
 	}
+	OnUpdateProgress(100, 0);
+	AfxMessageBox(_T("Done!!"));
 
-	convert_progress_bar.SetPos(100);
-	AfxMessageBox((LPCTSTR)CA2CT("Done!!"));
+	ShellExecute(
+		NULL,
+		_T("open"),
+		output_path.c_str(),
+		NULL,
+		NULL,
+		SW_SHOWNORMAL
+	);
 }
-
 
 void CMp3BitrateChangerDlg::OnBnClickedDel()
 {
@@ -248,4 +297,18 @@ void CMp3BitrateChangerDlg::OnBnClickedDel()
 	pos = m_ListCtrl.GetFirstSelectedItemPosition();
 	int idx = m_ListCtrl.GetNextSelectedItem(pos);
 	m_ListCtrl.DeleteItem(idx);
+}
+
+LRESULT CMp3BitrateChangerDlg::OnUpdateProgress(WPARAM wParam, LPARAM lParam)
+{
+	int percent = static_cast<int>(wParam);
+	convert_progress_bar.SetPos(percent);
+	return 0;
+}
+
+std::filesystem::path CMp3BitrateChangerDlg::make_temp_ascii_path(int index) {
+    wchar_t tempPath[MAX_PATH] = L"C:\Temp";
+    GetTempPathW(MAX_PATH, tempPath);
+    std::wstring tempFileName = L"mp3_temp_" + std::to_wstring(index) + L".mp3";
+    return std::filesystem::path(tempPath) / tempFileName;
 }
