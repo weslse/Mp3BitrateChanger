@@ -249,7 +249,12 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 				output_size = std::filesystem::file_size(output_filename);
 
 				loop_count++;
-				
+
+				// 실시간 진행률 계산 및 반영
+				int percent = static_cast<int>(
+					((i + (double)loop_count / MAX_LOOP) * 100) / total
+				);
+				OnUpdateProgress(percent, 0);
 
 				if (loop_count > MAX_LOOP) {
 					AfxMessageBox(_T("파일 크기를 제한 이하로 줄일 수 없습니다. 변환을 중단합니다."));
@@ -260,7 +265,8 @@ void CMp3BitrateChangerDlg::OnBnClickedConvert()
 			// 임시 파일 삭제
 			std::filesystem::remove(ascii_temp_path);
 
-			int percent = static_cast<int>((i + 1) * 100 / total);
+			// 파일별 완료 시점에서 100% 반영
+			int percent = static_cast<int>(((i + 1) * 100) / total);
 			OnUpdateProgress(percent, 0);
 		}
 		catch (const std::filesystem::filesystem_error& e) {
@@ -303,6 +309,7 @@ LRESULT CMp3BitrateChangerDlg::OnUpdateProgress(WPARAM wParam, LPARAM lParam)
 {
 	int percent = static_cast<int>(wParam);
 	convert_progress_bar.SetPos(percent);
+	convert_progress_bar.UpdateWindow();
 	return 0;
 }
 
